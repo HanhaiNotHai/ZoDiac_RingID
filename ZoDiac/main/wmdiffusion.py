@@ -18,24 +18,6 @@ class ModifiedStableDiffusionPipelineOutput(BaseOutput):
     init_latents: Optional[torch.FloatTensor]
 
 class WatermarkStableDiffusionPipeline(StableDiffusionPipeline):
-    def __init__(self,
-        vae,
-        text_encoder,
-        tokenizer,
-        unet,
-        scheduler,
-        safety_checker,
-        feature_extractor,
-        requires_safety_checker: bool = True,
-    ):
-        super(WatermarkStableDiffusionPipeline, self).__init__(vae,
-                text_encoder,
-                tokenizer,
-                unet,
-                scheduler,
-                safety_checker,
-                feature_extractor,
-                requires_safety_checker)
     
     # Generate image in tensor format
     def decode_latents_tensor(self, latents):
@@ -195,7 +177,7 @@ class WatermarkStableDiffusionPipeline(StableDiffusionPipeline):
         timesteps = self.scheduler.timesteps
 
         # 5. Prepare latent variables
-        num_channels_latents = self.unet.in_channels
+        num_channels_latents = self.unet.config.in_channels
         if not use_trainable_latents:
             latents = self.prepare_latents(
                 batch_size * num_images_per_prompt,
@@ -234,7 +216,7 @@ class WatermarkStableDiffusionPipeline(StableDiffusionPipeline):
                         cross_attention_kwargs=cross_attention_kwargs,
                     ).sample
                 else:
-                    noise_pred = checkpoint(self.unet_custom_forward, latent_model_input, t, prompt_embeds, cross_attention_kwargs).sample
+                    noise_pred = checkpoint(self.unet_custom_forward, latent_model_input, t, prompt_embeds, cross_attention_kwargs, use_reentrant=True).sample
 
                 # perform guidance
                 if do_classifier_free_guidance:
@@ -287,6 +269,7 @@ class WMDetectStableDiffusionPipeline(WatermarkStableDiffusionPipeline):
         scheduler,
         safety_checker,
         feature_extractor,
+        image_encoder,
         requires_safety_checker: bool = True,
     ):
         super(WMDetectStableDiffusionPipeline, self).__init__(vae,
@@ -296,6 +279,7 @@ class WMDetectStableDiffusionPipeline(WatermarkStableDiffusionPipeline):
                 scheduler,
                 safety_checker,
                 feature_extractor,
+                image_encoder,
                 requires_safety_checker)
         self.forward_diffusion = partial(self.backward_diffusion, reverse_process=True)
 

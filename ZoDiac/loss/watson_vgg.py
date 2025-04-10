@@ -10,7 +10,7 @@ class VggFeatureExtractor(nn.Module):
         super(VggFeatureExtractor, self).__init__()
         
         # download vgg
-        vgg16 = torchvision.models.vgg16(pretrained=True).features
+        vgg16 = torchvision.models.vgg16(torchvision.models.vgg.VGG16_Weights.IMAGENET1K_V1).features
         
         # set non trainable
         for param in vgg16.parameters():

@@ -118,14 +118,16 @@ class ReSDPipeline(StableDiffusionPipeline):
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # 3. Encode input prompt
-        text_embeddings = self._encode_prompt(
+        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
             prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
         )
+        text_embeddings = torch.cat([negative_prompt_embeds, prompt_embeds])
         
         if prompt2 is not None:
-            text_embeddings2 = self._encode_prompt(
-            prompt2, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
-        )
+            prompt_embeds, negative_prompt_embeds = self.encode_prompt(
+                prompt2, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
+            )
+            text_embeddings2 = torch.cat([negative_prompt_embeds, prompt_embeds])
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -134,7 +136,7 @@ class ReSDPipeline(StableDiffusionPipeline):
 
         # 5. Prepare latent variables
         if head_start_latents is None:
-            num_channels_latents = self.unet.in_channels
+            num_channels_latents = self.unet.config.in_channels
             latents = self.prepare_latents(
                 batch_size * num_images_per_prompt,
                 num_channels_latents,
