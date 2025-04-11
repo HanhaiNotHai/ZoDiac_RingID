@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from torchvision import transforms
+import torchvision.transforms.v2 as transforms
 from datasets import load_dataset
 
 from PIL import Image, ImageFilter, ImageDraw

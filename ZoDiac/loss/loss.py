@@ -17,16 +17,21 @@ class LossProvider(nn.Module):
 
         # add perceptive loss
         loss_percep = WatsonDistanceVgg(reduction='sum')
-        loss_percep.load_state_dict(torch.load('./loss/rgb_watson_vgg_trial0.pth', map_location='cpu'))
+        loss_percep.load_state_dict(torch.load('ZoDiac/loss/rgb_watson_vgg_trial0.pth', map_location='cpu'))
         loss_percep = loss_percep.to(device)
         self.loss_per = lambda pred_img, gt_img: loss_percep((1+pred_img)/2.0, (1+gt_img)/2.0)/ pred_img.shape[0]
 
-    def __call__(self, pred_img_tensor, gt_img_tensor, init_latents, wm_pipe):
+    def __call__(self, pred_img_tensor, gt_img_tensor, init_latents, wm_pipe, pbar=None):
         init_latents_fft = torch.fft.fftshift(torch.fft.fft2(init_latents), dim=(-1, -2))
         lossW = self.loss_w(init_latents_fft[wm_pipe.watermarking_mask], wm_pipe.gt_patch[wm_pipe.watermarking_mask])*self.loss_weights[3]
         lossI = self.loss_img(pred_img_tensor, gt_img_tensor)*self.loss_weights[0]
         lossP = self.loss_per(pred_img_tensor, gt_img_tensor)*self.loss_weights[1]
         lossS = (1-self.loss_ssim(pred_img_tensor, gt_img_tensor))*self.loss_weights[2]
         loss = lossW + lossI + lossP + lossS
-        logging.info(f'Watermark {lossW.item():.4f}, Image {lossI.item():.4f}, Perp {lossP.item():.4f}, SSIM {lossS.item():.4f} Total Loss {loss.item():.4f}')
+        if pbar is None:
+            logging.info(f'Watermark {lossW.item():.4f}, Image {lossI.item():.4f}, Perp {lossP.item():.4f}, SSIM {lossS.item():.4f} Total Loss {loss.item():.4f}')
+        else:
+            pbar.set_postfix_str(
+                f'wm {lossW.item():.4f}, img {lossI.item():.4f}, per {lossP.item():.4f}, ssim {lossS.item():.4f}, total {loss.item():.4f}'
+            )
         return loss
