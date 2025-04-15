@@ -159,120 +159,122 @@ def main():
     ######################
     # RingID
     ######################
-    # args = parse_args()
+    '''
+    args = parse_args()
 
-    # scheduler = DPMSolverMultistepScheduler.from_pretrained(
-    #     cfgs['model_id'], subfolder='scheduler'
-    # )
-    # pipe_r = InversableStableDiffusionPipeline(
-    #     pipe.vae,
-    #     pipe.text_encoder,
-    #     pipe.tokenizer,
-    #     pipe.unet,
-    #     scheduler,
-    #     pipe.safety_checker,
-    #     pipe.feature_extractor,
-    #     pipe.image_encoder,
-    #     pipe.config.requires_safety_checker,
-    # )
-    # pipe_r.set_progress_bar_config(leave=False)
+    scheduler = DPMSolverMultistepScheduler.from_pretrained(
+        cfgs['model_id'], subfolder='scheduler'
+    )
+    pipe_r = InversableStableDiffusionPipeline(
+        pipe.vae,
+        pipe.text_encoder,
+        pipe.tokenizer,
+        pipe.unet,
+        scheduler,
+        pipe.safety_checker,
+        pipe.feature_extractor,
+        pipe.image_encoder,
+        pipe.config.requires_safety_checker,
+    )
+    pipe_r.set_progress_bar_config(leave=False)
 
-    # if args.channel_min:
-    #     assert len(HETER_WATERMARK_CHANNEL) > 0
+    if args.channel_min:
+        assert len(HETER_WATERMARK_CHANNEL) > 0
 
-    # eval_methods = [
-    #     {
-    #         'Distance': 'L1',
-    #         'Metrics': '|a-b|        ',
-    #         'func': get_distance,
-    #         'kwargs': {'p': 1, 'mode': 'complex', 'channel_min': args.channel_min},
-    #     }
-    # ]
+    eval_methods = [
+        {
+            'Distance': 'L1',
+            'Metrics': '|a-b|        ',
+            'func': get_distance,
+            'kwargs': {'p': 1, 'mode': 'complex', 'channel_min': args.channel_min},
+        }
+    ]
 
-    # base_latents = pipe_r.get_random_latents()
-    # base_latents = base_latents.to(torch.float64)
-    # original_latents_shape = base_latents.shape
-    # sing_channel_ring_watermark_mask = torch.tensor(
-    #     ring_mask(size=original_latents_shape[-1], r_out=RADIUS, r_in=RADIUS_CUTOFF)
-    # )
+    base_latents = pipe_r.get_random_latents()
+    base_latents = base_latents.to(torch.float64)
+    original_latents_shape = base_latents.shape
+    sing_channel_ring_watermark_mask = torch.tensor(
+        ring_mask(size=original_latents_shape[-1], r_out=RADIUS, r_in=RADIUS_CUTOFF)
+    )
 
-    # # get heterogeneous watermark mask
-    # if len(HETER_WATERMARK_CHANNEL) > 0:
-    #     single_channel_heter_watermark_mask = torch.tensor(
-    #         ring_mask(
-    #             size=original_latents_shape[-1], r_out=RADIUS, r_in=RADIUS_CUTOFF
-    #         )  # TODO: change to whole mask
-    #     )
-    #     heter_watermark_region_mask = (
-    #         single_channel_heter_watermark_mask.unsqueeze(0)
-    #         .repeat(len(HETER_WATERMARK_CHANNEL), 1, 1)
-    #         .to(device)
-    #     )
+    # get heterogeneous watermark mask
+    if len(HETER_WATERMARK_CHANNEL) > 0:
+        single_channel_heter_watermark_mask = torch.tensor(
+            ring_mask(
+                size=original_latents_shape[-1], r_out=RADIUS, r_in=RADIUS_CUTOFF
+            )  # TODO: change to whole mask
+        )
+        heter_watermark_region_mask = (
+            single_channel_heter_watermark_mask.unsqueeze(0)
+            .repeat(len(HETER_WATERMARK_CHANNEL), 1, 1)
+            .to(device)
+        )
 
-    # watermark_region_mask = []
-    # for channel_idx in WATERMARK_CHANNEL:
-    #     if channel_idx in RING_WATERMARK_CHANNEL:
-    #         watermark_region_mask.append(sing_channel_ring_watermark_mask)
-    #     else:
-    #         watermark_region_mask.append(single_channel_heter_watermark_mask)
-    # watermark_region_mask = torch.stack(watermark_region_mask).to(device)  # [C, 64, 64]
+    watermark_region_mask = []
+    for channel_idx in WATERMARK_CHANNEL:
+        if channel_idx in RING_WATERMARK_CHANNEL:
+            watermark_region_mask.append(sing_channel_ring_watermark_mask)
+        else:
+            watermark_region_mask.append(single_channel_heter_watermark_mask)
+    watermark_region_mask = torch.stack(watermark_region_mask).to(device)  # [C, 64, 64]
 
-    # # ###### Make RingID pattern
-    # single_channel_num_slots = RADIUS - RADIUS_CUTOFF
-    # key_value_list = [
-    #     [
-    #         list(combo)
-    #         for combo in itertools.product(
-    #             np.linspace(
-    #                 -args.ring_value_range, args.ring_value_range, args.num_inmost_keys
-    #             ).tolist(),
-    #             repeat=len(RING_WATERMARK_CHANNEL),
-    #         )
-    #     ]
-    #     for _ in range(single_channel_num_slots)
-    # ]
-    # key_value_combinations = list(itertools.product(*key_value_list))
+    # ###### Make RingID pattern
+    single_channel_num_slots = RADIUS - RADIUS_CUTOFF
+    key_value_list = [
+        [
+            list(combo)
+            for combo in itertools.product(
+                np.linspace(
+                    -args.ring_value_range, args.ring_value_range, args.num_inmost_keys
+                ).tolist(),
+                repeat=len(RING_WATERMARK_CHANNEL),
+            )
+        ]
+        for _ in range(single_channel_num_slots)
+    ]
+    key_value_combinations = list(itertools.product(*key_value_list))
 
-    # # random select from all possible value combinations, then generate patterns for selected ones.
-    # if args.assigned_keys > 0:
-    #     assert args.assigned_keys <= len(key_value_combinations)
-    #     key_value_combinations = random.sample(key_value_combinations, k=args.assigned_keys)
-    # Fourier_watermark_pattern_list = [
-    #     make_Fourier_ringid_pattern(
-    #         device,
-    #         list(combo),
-    #         base_latents,
-    #         radius=RADIUS,
-    #         radius_cutoff=RADIUS_CUTOFF,
-    #         ring_watermark_channel=RING_WATERMARK_CHANNEL,
-    #         heter_watermark_channel=HETER_WATERMARK_CHANNEL,
-    #         heter_watermark_region_mask=(
-    #             heter_watermark_region_mask if len(HETER_WATERMARK_CHANNEL) > 0 else None
-    #         ),
-    #     )
-    #     for _, combo in enumerate(key_value_combinations)
-    # ]
+    # random select from all possible value combinations, then generate patterns for selected ones.
+    if args.assigned_keys > 0:
+        assert args.assigned_keys <= len(key_value_combinations)
+        key_value_combinations = random.sample(key_value_combinations, k=args.assigned_keys)
+    Fourier_watermark_pattern_list = [
+        make_Fourier_ringid_pattern(
+            device,
+            list(combo),
+            base_latents,
+            radius=RADIUS,
+            radius_cutoff=RADIUS_CUTOFF,
+            ring_watermark_channel=RING_WATERMARK_CHANNEL,
+            heter_watermark_channel=HETER_WATERMARK_CHANNEL,
+            heter_watermark_region_mask=(
+                heter_watermark_region_mask if len(HETER_WATERMARK_CHANNEL) > 0 else None
+            ),
+        )
+        for _, combo in enumerate(key_value_combinations)
+    ]
 
-    # ring_capacity = len(Fourier_watermark_pattern_list)
+    ring_capacity = len(Fourier_watermark_pattern_list)
 
-    # if args.fix_gt:
-    #     Fourier_watermark_pattern_list = [
-    #         fft(ifft(Fourier_watermark_pattern).real)
-    #         for Fourier_watermark_pattern in Fourier_watermark_pattern_list
-    #     ]
+    if args.fix_gt:
+        Fourier_watermark_pattern_list = [
+            fft(ifft(Fourier_watermark_pattern).real)
+            for Fourier_watermark_pattern in Fourier_watermark_pattern_list
+        ]
 
-    # if args.time_shift:
-    #     for Fourier_watermark_pattern in Fourier_watermark_pattern_list:
-    #         # Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...] = fft(torch.fft.fftshift(ifft(Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...]), dim = (-1, -2)) * args.time_shift_factor)
-    #         Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...] = fft(
-    #             torch.fft.fftshift(
-    #                 ifft(Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...]), dim=(-1, -2)
-    #             )
-    #         )
+    if args.time_shift:
+        for Fourier_watermark_pattern in Fourier_watermark_pattern_list:
+            # Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...] = fft(torch.fft.fftshift(ifft(Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...]), dim = (-1, -2)) * args.time_shift_factor)
+            Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...] = fft(
+                torch.fft.fftshift(
+                    ifft(Fourier_watermark_pattern[:, RING_WATERMARK_CHANNEL, ...]), dim=(-1, -2)
+                )
+            )
 
-    # key_indices_to_evaluate = np.random.choice(
-    #     ring_capacity, size=args.trials, replace=True
-    # ).tolist()
+    key_indices_to_evaluate = np.random.choice(
+        ring_capacity, size=args.trials, replace=True
+    ).tolist()
+    '''
 
     dataset = 'dataset/DIV2K/DIV2K_train_HR'
     wm_path = dataset + '_wm'
